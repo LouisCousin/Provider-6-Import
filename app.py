@@ -433,7 +433,12 @@ prompt_final = user_instruction
 prompt_text = user_instruction
 
 if uploaded_file is not None:
-    texte_a_traiter, template_styles = importer.analyser_document(uploaded_file)
+    contenu_structure, template_styles = importer.analyser_document(uploaded_file)
+    texte_a_traiter = (
+        "\n".join(block["text"] for block in contenu_structure)
+        if isinstance(contenu_structure, list)
+        else contenu_structure
+    )
     st.session_state.source_template_styles = template_styles
     prompt_final = (
         "Voici une instruction à appliquer sur le contenu d'un document.\n\n"

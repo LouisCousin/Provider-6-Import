@@ -2,22 +2,44 @@ from __future__ import annotations
 
 """Module d'analyse de documents pour l'import."""
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import docx
 import fitz  # PyMuPDF
 
 
-def analyser_docx(file_stream) -> Tuple[str, Optional[Dict[str, Any]]]:
-    """Tente d'extraire le texte et un template de style simplifié d'un DOCX.
+def analyser_docx(
+    file_stream,
+) -> Tuple[List[Dict[str, str]], Optional[Dict[str, Any]]]:
+    """Tente d'extraire le contenu structuré et un template de style simplifié d'un DOCX.
 
-    Retourne ``(texte_brut, styles)`` où ``styles`` est ``None`` si l'extraction
-    de style échoue.
+    Retourne ``(contenu_structure, styles)`` où ``styles`` est ``None`` si l'extraction
+    de style échoue. ``contenu_structure`` est une liste de dictionnaires décrivant
+    chaque bloc de contenu du document.
     """
     try:
         file_stream.seek(0)
         document = docx.Document(file_stream)
-        full_text = "\n".join(para.text for para in document.paragraphs)
+
+        contenu_structure: List[Dict[str, str]] = []
+        for para in document.paragraphs:
+            style_name = para.style.name.lower() if para.style and para.style.name else ""
+            block_type = "paragraph"
+            if style_name.startswith("heading 1") or style_name.startswith("titre 1"):
+                block_type = "heading_1"
+            elif style_name.startswith("heading 2") or style_name.startswith("titre 2"):
+                block_type = "heading_2"
+            elif style_name.startswith("heading 3") or style_name.startswith("titre 3"):
+                block_type = "heading_3"
+            elif style_name.startswith("heading 4") or style_name.startswith("titre 4"):
+                block_type = "heading_4"
+            elif style_name.startswith("heading 5") or style_name.startswith("titre 5"):
+                block_type = "heading_5"
+            elif style_name.startswith("heading 6") or style_name.startswith("titre 6"):
+                block_type = "heading_6"
+
+            if para.text.strip():
+                contenu_structure.append({"type": block_type, "text": para.text})
 
         styles: Optional[Dict[str, Any]] = None
         try:
@@ -41,15 +63,18 @@ def analyser_docx(file_stream) -> Tuple[str, Optional[Dict[str, Any]]]:
         except Exception:
             styles = None
 
-        return full_text, styles
+        return contenu_structure, styles
     except Exception:
         try:
             file_stream.seek(0)
             document = docx.Document(file_stream)
-            full_text = "\n".join(para.text for para in document.paragraphs)
+            contenu_structure = []
+            for para in document.paragraphs:
+                if para.text.strip():
+                    contenu_structure.append({"type": "paragraph", "text": para.text})
         except Exception:
-            full_text = ""
-        return full_text, None
+            contenu_structure = []
+        return contenu_structure, None
 
 
 def analyser_pdf(file_stream) -> Tuple[str, None]:
@@ -60,7 +85,9 @@ def analyser_pdf(file_stream) -> Tuple[str, None]:
     return full_text, None
 
 
-def analyser_document(fichier) -> Tuple[str, Optional[Dict[str, Any]]]:
+def analyser_document(
+    fichier,
+) -> Tuple[Union[str, List[Dict[str, str]]], Optional[Dict[str, Any]]]:
     """Analyse un fichier importé et choisit la méthode appropriée."""
     filename = fichier.name.lower()
     if filename.endswith(".docx"):
