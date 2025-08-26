@@ -20,14 +20,38 @@ logging.basicConfig(
 )
 
 
+def _extraire_style_paragraphe(para: Paragraph) -> Optional[Dict[str, Any]]:
+    """Extrait les informations de style du premier run d'un paragraphe.
+
+    Retourne un dictionnaire contenant les attributs principaux de police ou ``None``
+    si aucune information n'est disponible (paragraphe vide, etc.).
+    """
+    try:
+        premier_run = para.runs[0]
+        font = premier_run.font
+
+        couleur_rgb = font.color.rgb if font.color and font.color.rgb else None
+
+        return {
+            "font_name": font.name,
+            "font_size": font.size.pt if font.size else None,
+            "is_bold": font.bold,
+            "is_italic": font.italic,
+            "font_color_rgb": str(couleur_rgb) if couleur_rgb else None,
+        }
+    except IndexError:
+        return None
+
+
 def analyser_docx(
     file_stream,
 ) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
-    """Tente d'extraire le contenu structuré et un template de style simplifié d'un DOCX.
+    """Extrait le contenu structuré d'un DOCX avec les styles associés.
 
-    Retourne ``(contenu_structure, styles)`` où ``styles`` est ``None`` si l'extraction
-    de style échoue. ``contenu_structure`` est une liste de dictionnaires décrivant
-    chaque bloc de contenu du document (paragraphes, titres, listes ou tableaux).
+    Retourne ``(contenu_structure, None)`` où ``contenu_structure`` est une liste de
+    dictionnaires décrivant chaque bloc de contenu du document (paragraphes, titres,
+    listes ou tableaux). Chaque bloc de paragraphe ou de titre inclut un dictionnaire
+    ``style`` décrivant sa mise en forme.
     """
     try:
         file_stream.seek(0)
@@ -70,7 +94,10 @@ def analyser_docx(
                     block_type = "heading_6"
 
                 if block.text.strip():
-                    contenu_structure.append({"type": block_type, "text": block.text})
+                    style_info = _extraire_style_paragraphe(block)
+                    contenu_structure.append(
+                        {"type": block_type, "text": block.text, "style": style_info}
+                    )
 
             elif isinstance(block, Table):
                 table_data: List[List[str]] = []
@@ -80,32 +107,7 @@ def analyser_docx(
                 if table_data:
                     contenu_structure.append({"type": "table", "rows": table_data})
 
-        styles: Optional[Dict[str, Any]] = None
-        try:
-            first_para = document.paragraphs[0] if document.paragraphs else None
-            first_run = first_para.runs[0] if first_para and first_para.runs else None
-            if first_run:
-                font_name = first_run.font.name or "Calibri"
-                font_size = first_run.font.size.pt if first_run.font.size else 11
-                styles = {
-                    "prompt": {
-                        "font_name": font_name,
-                        "font_size": font_size,
-                        "is_bold": bool(first_run.bold),
-                    },
-                    "response": {
-                        "font_name": font_name,
-                        "font_size": font_size,
-                        "is_bold": False,
-                    },
-                }
-        except (IndexError, AttributeError) as e:
-            logging.warning(
-                f"Impossible d'extraire les styles du document : {e}", exc_info=True
-            )
-            styles = None
-
-        return contenu_structure, styles
+        return contenu_structure, None
 
     except OpcError as e:
         logging.error(

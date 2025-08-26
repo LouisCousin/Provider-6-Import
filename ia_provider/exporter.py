@@ -48,7 +48,13 @@ class MarkdownToDocxConverter:
         if size := style.get("font_size"):
             run.font.size = Pt(size)
         if color := style.get("font_color_rgb"):
-            run.font.color.rgb = RGBColor(*color)
+            try:
+                if isinstance(color, str):
+                    run.font.color.rgb = RGBColor.from_string(color)
+                else:
+                    run.font.color.rgb = RGBColor(*color)
+            except Exception:
+                pass
         run.bold = style.get("is_bold", False)
         run.italic = style.get("is_italic", False)
 
