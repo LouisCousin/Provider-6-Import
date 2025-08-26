@@ -141,6 +141,25 @@ def hex_to_rgb(hex_color: str) -> tuple:
     return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
 
 
+def formater_contenu_en_texte(contenu: List[Dict]) -> str:
+    """Convertit la structure de données en une chaîne de texte formatée."""
+    lignes_texte: List[str] = []
+    for bloc in contenu:
+        bloc_type = bloc.get("type", "")
+        if bloc_type.startswith("heading"):
+            niveau = bloc_type.split("_")[-1]
+            lignes_texte.append(f"{'#' * int(niveau)} {bloc.get('text', '')}")
+        elif bloc_type == "paragraph":
+            lignes_texte.append(bloc.get("text", ""))
+        elif bloc_type == "list":
+            for item in bloc.get("items", []):
+                lignes_texte.append(f"* {item}")
+        elif bloc_type == "table":
+            for ligne in bloc.get("rows", []):
+                lignes_texte.append(" | ".join(ligne))
+    return "\n".join(lignes_texte)
+
+
 # Dictionnaire des limites de tokens par modèle
 MODEL_MAX_TOKENS = {
     "gpt-4.1": 32768,
@@ -435,7 +454,7 @@ prompt_text = user_instruction
 if uploaded_file is not None:
     contenu_structure, template_styles = importer.analyser_document(uploaded_file)
     texte_a_traiter = (
-        "\n".join(block["text"] for block in contenu_structure)
+        formater_contenu_en_texte(contenu_structure)
         if isinstance(contenu_structure, list)
         else contenu_structure
     )

@@ -9,6 +9,10 @@ import logging
 import docx
 from docx.opc.exceptions import OpcError
 import fitz  # PyMuPDF
+from docx.oxml.table import CT_Tbl
+from docx.oxml.text.paragraph import CT_P
+from docx.table import Table
+from docx.text.paragraph import Paragraph
 
 # Configuration simple pour la journalisation
 logging.basicConfig(
@@ -18,38 +22,63 @@ logging.basicConfig(
 
 def analyser_docx(
     file_stream,
-) -> Tuple[List[Dict[str, str]], Optional[Dict[str, Any]]]:
+) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
     """Tente d'extraire le contenu structuré et un template de style simplifié d'un DOCX.
 
     Retourne ``(contenu_structure, styles)`` où ``styles`` est ``None`` si l'extraction
     de style échoue. ``contenu_structure`` est une liste de dictionnaires décrivant
-    chaque bloc de contenu du document.
+    chaque bloc de contenu du document (paragraphes, titres, listes ou tableaux).
     """
     try:
         file_stream.seek(0)
         document = docx.Document(file_stream)
 
-        contenu_structure: List[Dict[str, str]] = []
-        for para in document.paragraphs:
-            style_name = (
-                para.style.name.lower() if para.style and para.style.name else ""
-            )
-            block_type = "paragraph"
-            if style_name.startswith("heading 1") or style_name.startswith("titre 1"):
-                block_type = "heading_1"
-            elif style_name.startswith("heading 2") or style_name.startswith("titre 2"):
-                block_type = "heading_2"
-            elif style_name.startswith("heading 3") or style_name.startswith("titre 3"):
-                block_type = "heading_3"
-            elif style_name.startswith("heading 4") or style_name.startswith("titre 4"):
-                block_type = "heading_4"
-            elif style_name.startswith("heading 5") or style_name.startswith("titre 5"):
-                block_type = "heading_5"
-            elif style_name.startswith("heading 6") or style_name.startswith("titre 6"):
-                block_type = "heading_6"
+        def iter_block_items(parent):
+            """Yield paragraph and table objects in *parent* in document order."""
+            for child in parent.element.body.iterchildren():
+                if isinstance(child, CT_P):
+                    yield Paragraph(child, parent)
+                elif isinstance(child, CT_Tbl):
+                    yield Table(child, parent)
 
-            if para.text.strip():
-                contenu_structure.append({"type": block_type, "text": para.text})
+        contenu_structure: List[Dict[str, Any]] = []
+        for block in iter_block_items(document):
+            if isinstance(block, Paragraph):
+                style_name = (
+                    block.style.name.lower() if block.style and block.style.name else ""
+                )
+                if "list" in style_name or "liste" in style_name:
+                    if block.text.strip():
+                        if contenu_structure and contenu_structure[-1]["type"] == "list":
+                            contenu_structure[-1]["items"].append(block.text)
+                        else:
+                            contenu_structure.append({"type": "list", "items": [block.text]})
+                    continue
+
+                block_type = "paragraph"
+                if style_name.startswith("heading 1") or style_name.startswith("titre 1"):
+                    block_type = "heading_1"
+                elif style_name.startswith("heading 2") or style_name.startswith("titre 2"):
+                    block_type = "heading_2"
+                elif style_name.startswith("heading 3") or style_name.startswith("titre 3"):
+                    block_type = "heading_3"
+                elif style_name.startswith("heading 4") or style_name.startswith("titre 4"):
+                    block_type = "heading_4"
+                elif style_name.startswith("heading 5") or style_name.startswith("titre 5"):
+                    block_type = "heading_5"
+                elif style_name.startswith("heading 6") or style_name.startswith("titre 6"):
+                    block_type = "heading_6"
+
+                if block.text.strip():
+                    contenu_structure.append({"type": block_type, "text": block.text})
+
+            elif isinstance(block, Table):
+                table_data: List[List[str]] = []
+                for row in block.rows:
+                    row_data = [cell.text for cell in row.cells]
+                    table_data.append(row_data)
+                if table_data:
+                    contenu_structure.append({"type": "table", "rows": table_data})
 
         styles: Optional[Dict[str, Any]] = None
         try:
@@ -100,7 +129,7 @@ def analyser_pdf(file_stream) -> Tuple[str, None]:
 
 def analyser_document(
     fichier,
-) -> Tuple[Union[str, List[Dict[str, str]]], Optional[Dict[str, Any]]]:
+) -> Tuple[Union[str, List[Dict[str, Any]]], Optional[Dict[str, Any]]]:
     """Analyse un fichier importé et choisit la méthode appropriée."""
     filename = fichier.name.lower()
     if filename.endswith(".docx"):
