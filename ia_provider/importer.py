@@ -4,8 +4,16 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+import logging
+
 import docx
+from docx.opc.exceptions import OpcError
 import fitz  # PyMuPDF
+
+# Configuration simple pour la journalisation
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 
 def analyser_docx(
@@ -23,7 +31,9 @@ def analyser_docx(
 
         contenu_structure: List[Dict[str, str]] = []
         for para in document.paragraphs:
-            style_name = para.style.name.lower() if para.style and para.style.name else ""
+            style_name = (
+                para.style.name.lower() if para.style and para.style.name else ""
+            )
             block_type = "paragraph"
             if style_name.startswith("heading 1") or style_name.startswith("titre 1"):
                 block_type = "heading_1"
@@ -60,21 +70,24 @@ def analyser_docx(
                         "is_bold": False,
                     },
                 }
-        except Exception:
+        except (IndexError, AttributeError) as e:
+            logging.warning(
+                f"Impossible d'extraire les styles du document : {e}", exc_info=True
+            )
             styles = None
 
         return contenu_structure, styles
-    except Exception:
-        try:
-            file_stream.seek(0)
-            document = docx.Document(file_stream)
-            contenu_structure = []
-            for para in document.paragraphs:
-                if para.text.strip():
-                    contenu_structure.append({"type": "paragraph", "text": para.text})
-        except Exception:
-            contenu_structure = []
-        return contenu_structure, None
+
+    except OpcError as e:
+        logging.error(
+            f"Erreur de parsing du fichier DOCX (potentiellement corrompu) : {e}"
+        )
+        return [], None
+    except Exception as e:  # Garde un filet de sécurité
+        logging.error(
+            f"Erreur inattendue lors de l'analyse du DOCX : {e}", exc_info=True
+        )
+        return [], None
 
 
 def analyser_pdf(file_stream) -> Tuple[str, None]:
