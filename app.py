@@ -418,38 +418,45 @@ if st.session_state.conversation_mode and st.session_state.messages:
     st.divider()
 
 # Zone de saisie
-st.subheader("Source du texte")
-source_mode = st.radio("Choisir la source", ["Saisie manuelle", "Importer un document"])
+st.subheader("Instruction et contexte")
 
-prompt = ""
-prompt_text = ""
+user_instruction = st.text_area(
+    "Votre instruction :",
+    height=100,
+    placeholder="Ex: Résume ce document en 5 points clés.",
+)
+uploaded_file = st.file_uploader(
+    "Ajouter un document comme contexte (optionnel)", type=["docx", "pdf"]
+)
 
-if source_mode == "Saisie manuelle":
-    st.session_state.source_template_styles = None
-    prompt = st.text_area(
-        "Votre question ou instruction:",
-        height=100,
-        placeholder="Exemple: Explique-moi la différence entre une liste et un tuple en Python",
+prompt_final = user_instruction
+prompt_text = user_instruction
+
+if uploaded_file is not None:
+    texte_a_traiter, template_styles = importer.analyser_document(uploaded_file)
+    st.session_state.source_template_styles = template_styles
+    prompt_final = (
+        "Voici une instruction à appliquer sur le contenu d'un document.\n\n"
+        f'Instruction de l\'utilisateur : "{user_instruction}"\n\n'
+        "Contenu du document à analyser :\n"
+        f"{texte_a_traiter}\n"
     )
-    prompt_text = prompt
+    prompt_text = user_instruction
+    if not template_styles:
+        prompt_final += (
+            "\n\n---\nInstruction de formatage : Structure ta réponse finale en utilisant la syntaxe Markdown."
+        )
+        st.warning(
+            "⚠️ Style du document non détecté. La réponse sera formatée avec les styles par défaut."
+        )
+    else:
+        st.info(
+            "💡 Style du document source détecté. La mise en forme sera conservée au mieux."
+        )
 else:
-    uploaded_file = st.file_uploader("Choisissez un fichier .docx ou .pdf", type=["docx", "pdf"])
-    if uploaded_file is not None:
-        texte_a_traiter, template_styles = importer.analyser_document(uploaded_file)
-        st.session_state.source_template_styles = template_styles
-        prompt_text = texte_a_traiter
-        if template_styles:
-            st.info("💡 Style du document source détecté. La mise en forme sera conservée au mieux.")
-            prompt = (
-                "Voici un texte. Reformule-le ou exécute la tâche demandée en gardant une structure similaire :\n\n"
-                f"{texte_a_traiter}"
-            )
-        else:
-            st.warning("⚠️ Style du document non détecté. Utilisation des styles par défaut via Markdown.")
-            prompt = (
-                "Voici un texte. Reformule-le ou exécute la tâche demandée et structure ta réponse en Markdown (titres #, listes *, gras **, etc.) :\n\n"
-                f"{texte_a_traiter}"
-            )
+    st.session_state.source_template_styles = None
+
+prompt = prompt_final
 
 col1, col2, col3 = st.columns([1, 1, 2])
 
@@ -464,8 +471,10 @@ with col2:
             st.rerun()
 
 # Génération de la réponse
-if generate_button and prompt:
-    if not api_key:
+if generate_button:
+    if not user_instruction.strip():
+        st.error("Veuillez saisir une instruction.")
+    elif not api_key:
         st.error(f"⚠️ Veuillez entrer une clé API {provider}")
     else:
         try:

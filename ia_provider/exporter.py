@@ -210,7 +210,9 @@ def generer_export_docx(
 
     ``styles_interface`` correspond aux styles définis dans l'interface.
     ``template_source`` peut contenir des styles extraits d'un document importé
-    et est prioritaire sur ``styles_interface`` lorsqu'il est fourni.
+    et est prioritaire sur ``styles_interface`` lorsqu'il est fourni. Lorsque
+    ``template_source`` est ``None``, les styles de l'interface servent de
+    solution de repli.
 
     Chaque résultat doit contenir au minimum les champs ``status``,
     ``prompt_text`` et ``clean_response`` (ou ``response``).
